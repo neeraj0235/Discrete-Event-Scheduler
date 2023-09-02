@@ -9,7 +9,7 @@
 #define min(a, b) (a > b ? b : a)
 #define max(a, b) (a > b ? a : b)
 
-#define enqueue(obj, N) _Generic(obj, Queue* : enqueue_q, PriorityQueue* : enqueue_pq) (obj, N)
+#define enqueue(obj, node) _Generic(obj, Queue* : enqueue_q, PriorityQueue* : enqueue_pq) (obj, node)
 #define dequeue(obj) _Generic(obj, Queue* : dequeue_q, PriorityQueue* : dequeue_pq) (obj)
 #define isEmpty(obj) _Generic(obj, Queue* : isEmpty_q, PriorityQueue* : isEmpty_pq) (obj)
 
@@ -230,7 +230,131 @@ void rr_scheduling(Node** jobs, int N, double ts) {
     print_report_and_reset(jobs, N);
 }
 
+void mlfq_scheduling(Node** jobs, int N, double ts1, double ts2, double ts3, double b) {
+    double current_time = jobs[0]->arrival;
+    double next_boost = b;
+    int job_ct = 0;
+
+    Queue* q1 = createQueue(N);
+    Queue* q2 = createQueue(N);
+    Queue* q3 = createQueue(N);
+
+    while(jobs[job_ct]->arrival <= current_time) {
+        enqueue(q1, jobs[job_ct]);
+        job_ct++;
+    }
+
+    printf("%d  %d  %d\n", q1->size, q2->size, q3->size);
+    
+    double next_arrival = (job_ct == N ? 100000 : jobs[job_ct]->arrival);
+
+    printf("%ld\n", next_arrival);
+
+
+    while(!isEmpty(q1) || !isEmpty(q2) || !isEmpty(q3)) {
+        double time_allowed = min(next_arrival, next_boost);
+
+        while(!isEmpty(q1)) {
+            // printf("Entered in q1\n");
+            Node* current_job = dequeue(q1);
+            if(current_job->first_schedule == -1) {
+                current_job->first_schedule = current_time;
+            }
+
+            double time_reqd = min(ts1, current_job->remaining_burst);
+            current_time += time_reqd;
+
+            current_job->remaining_burst -= time_reqd;
+
+            current_job->remaining_burst == 0 ? current_job->completion_time = current_time : enqueue(q2, current_job);
+
+            if(current_time >= time_allowed) {
+                // printf("Entered in if-else\n");
+                if(next_boost == time_allowed) {
+                    while(!isEmpty(q2)) {
+                        Node* temp = dequeue(q2);
+                        enqueue(q1, temp);
+                    }
+                    while(!isEmpty(q3)) {
+                        Node* temp = dequeue(q3);
+                        enqueue(q1, temp);
+                    }
+                    next_boost += b;
+                } else {
+                    while(job_ct < N && jobs[job_ct]->arrival == next_arrival) {
+                        enqueue(q1, jobs[job_ct]);
+                        job_ct++;
+                    }
+                    next_arrival = (job_ct == N ? 100000 : jobs[job_ct]->arrival);
+                }
+            }
+        }
+
+        while(!isEmpty(q2)) {
+            // printf("Entered in q2\n");
+            Node* current_job = dequeue(q2);
+
+            double time_reqd = min(ts2, current_job->remaining_burst);
+            if(current_time + time_reqd > time_allowed) {
+                enqueue(q1, current_job);
+                if(time_allowed == next_boost) {
+                    current_time = time_allowed;
+                    while(!isEmpty(q2)) {
+                        Node* temp = dequeue(q2);
+                        enqueue(q1, temp);
+                    }
+                } 
+                break;
+            }
+
+            current_time += time_reqd;
+
+            current_job->remaining_burst -= time_reqd;
+            current_job->remaining_burst == 0 ? current_job->completion_time = current_time : enqueue(q3, current_job);
+        }
+
+        while (!isEmpty(q3)) {
+            // printf("Entered in q3\n");
+            Node* current_job = dequeue(q3);
+
+            double time_reqd = min(ts3, current_job->remaining_burst);
+
+            if(current_time + time_reqd > time_allowed) {
+                if(time_allowed == next_boost) {
+                    current_time = time_allowed;
+                    enqueue(q1, current_job);
+                    while(!isEmpty(q2)) {
+                        Node* temp = dequeue(q2);
+                        enqueue(q1, temp);
+                    }
+                    next_boost += b;
+                } 
+                break;
+            }
+
+            current_time += time_reqd;
+
+            current_job->remaining_burst -= time_reqd;
+            current_job->remaining_burst == 0 ? current_job->completion_time = current_time : enqueue(q3, current_job);
+        }
+    }
+
+    for(int i = 0; i < N; i++) {
+        printf("%s : \n", jobs[i]->PID);
+        printf("Arrival = %lf, first_schedule = %lf, completion_time = %lf\n", jobs[i]->arrival, jobs[i]->first_schedule, jobs[i]->completion_time);
+    }
+
+    for(int i = 0; i < N; i++) {
+        jobs[i]->remaining_burst = jobs[i]->burst;
+        jobs[i]->first_schedule = -1;
+        jobs[i]->completion_time = -1;
+    }
+
+}
+
 int main () {
+    // freopen("output.txt", "a+", stdout); 
+    // freopen("inpTestcase1.txt", "r", stdin);
     int N;
     scanf("%d", &N);
 
@@ -263,9 +387,9 @@ int main () {
     printf("\n");
 
     // sjf_scheduling(jobs, N);
-
+    // rr_scheduling(jobs, N, 6);
     // stcf_scheduling(jobs, N);
-    rr_scheduling(jobs, N, 5);
+    // mlfq_scheduling(jobs, N, 5, 3, 2, 8);
     return 0;
     
 }
